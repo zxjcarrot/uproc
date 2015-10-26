@@ -17,7 +17,6 @@
     */
     int (*uproc_handler_t)(uproc_buf_t *buf, int *done, off_t fileoff, void *private_data);
 ```
-
 4. `uproc` provides very few core interfaces, and some utility wrappers for exporting primitive types. Checkout `include/uproc.h` to see detailed usage of the interfaces.  
 
 # Dependency
@@ -25,7 +24,7 @@
 
 #HowToUse
 Example: creates 3 entry under root directory of `uproc` filesystem.
-```C
+```
 #include <errno.h>
 #include <string.h>
 #include <stdio.h>
