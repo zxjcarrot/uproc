@@ -112,3 +112,24 @@ int main(int argc, char const *argv[]) {
 }
 ```
 For more examples, see `tests/*`.
+
+#Build&Test
+###To build:  
+1. first make sure `libfuse` is installed on the system.
+2. run following commands:
+```
+git clone https://github.com/zxjcarrot/uproc
+cd uproc
+make
+```
+
+###To test:
+
+1. first make sure `libfuse` is installed on the system.
+2. run following commands:
+```
+git clone https://github.com/zxjcarrot/uproc
+cd uproc
+make test
+./uproc_test
+```
