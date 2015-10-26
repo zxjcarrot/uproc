@@ -3,8 +3,9 @@
 
 # Design
 1. `uproc` runs a eventloop to process read and write requests, so `uproc` should be run in a independent thread.
-2. Every pathname in `uproc` is associated with two handlers which handles read and write syscalls respectively. 
-3. Handler is in the form of:
+2. `uproc` provides very few core interfaces, and some utility wrappers for exporting primitive types. Checkout `include/uproc.h` to see detailed usage of the interfaces. 
+3. Every pathname in `uproc` is associated with two handlers which handles read and write syscalls respectively. 
+4. Handler is in the form of:
 ```C
     /*
     * @buf: For read request, @buf stores the buffer into which data should be written by your handler.
@@ -17,7 +18,6 @@
     */
     int (*uproc_handler_t)(uproc_buf_t *buf, int *done, off_t fileoff, void *private_data);
 ```
-4. `uproc` provides very few core interfaces, and some utility wrappers for exporting primitive types. Checkout `include/uproc.h` to see detailed usage of the interfaces.  
 
 # Dependency
 `uproc` is built on `fuse` and written in standard C, so only `libfuse` is required.
