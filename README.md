@@ -34,7 +34,7 @@ make
 make install #install headers under /usr/local/include, libs under /usr/local/lib
 ```
 
-###To examples:  
+###To build examples:  
 1. first make sure `libfuse` is installed on the system.
 2. run following commands:
 ```shell
