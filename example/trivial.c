@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include <assert.h>
 
-#include <uproc.h>
+#include <uproc/uproc.h>
 
 int var1;
 const char * var2;
@@ -56,6 +56,7 @@ int main(int argc, char const *argv[]) {
     ret = uproc_ctx_init(&uproc_ctx, "uproc", 1);
     if (ret) {
         fprintf(stderr, "failed to initialize uproc %s\n", strerror(ret));
+        exit(-1);
     }
 
     /* normal entry under / */

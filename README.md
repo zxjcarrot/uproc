@@ -34,7 +34,7 @@ Example: creates 3 entry under root directory of `uproc` filesystem.
 #include <unistd.h>
 #include <assert.h>
 
-#include <uproc.h>
+#include <uproc/uproc.h>
 
 int var1;
 const char * var2;
@@ -81,6 +81,7 @@ int main(int argc, char const *argv[]) {
     ret = uproc_ctx_init(&uproc_ctx, "uproc", 1);
     if (ret) {
         fprintf(stderr, "failed to initialize uproc %s\n", strerror(ret));
+        exit(-1);
     }
 
     /* readable writable entry */
@@ -111,16 +112,26 @@ int main(int argc, char const *argv[]) {
     return 0;
 }
 ```
-For more examples, see `tests/*`.
+For more examples, see `tests/*`, `example/*`.
 
 #Build&Test
 ###To build:  
 1. first make sure `libfuse` is installed on the system.
 2. run following commands:
-```
+```shell
 git clone https://github.com/zxjcarrot/uproc
 cd uproc
 make
+make install #install headers under /usr/local/include, libs under /usr/local/lib
+```
+
+###To examples:  
+1. first make sure `libfuse` is installed on the system.
+2. run following commands:
+```shell
+git clone https://github.com/zxjcarrot/uproc
+cd uproc
+make exmaple
 ```
 
 ###To test:
