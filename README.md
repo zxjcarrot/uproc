@@ -54,7 +54,7 @@ make test
 ./uproc_test
 ```
 
-#HowToUse
+#How to use
 Example: creates 3 entry under root directory of `uproc` filesystem.
 ```C
 #include <errno.h>
@@ -145,4 +145,5 @@ int main(int argc, char const *argv[]) {
 }
 ```
 For more examples, see `tests/*`, `example/*`.
-
+#How to contribute
+Any contribution is welcome, just send the pull requests.
