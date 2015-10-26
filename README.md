@@ -22,6 +22,38 @@
 # Dependency
 `uproc` is built on `fuse` and written in standard C, so only `libfuse` is required.
 
+
+#Build&Test
+###To build:  
+1. first make sure `libfuse` is installed on the system.
+2. run following commands:
+```shell
+git clone https://github.com/zxjcarrot/uproc
+cd uproc
+make
+make install #install headers under /usr/local/include, libs under /usr/local/lib
+```
+
+###To examples:  
+1. first make sure `libfuse` is installed on the system.
+2. run following commands:
+```shell
+git clone https://github.com/zxjcarrot/uproc
+cd uproc
+make exmaple
+```
+
+###To test:
+
+1. first make sure `libfuse` is installed on the system.
+2. run following commands:
+```
+git clone https://github.com/zxjcarrot/uproc
+cd uproc
+make test
+./uproc_test
+```
+
 #HowToUse
 Example: creates 3 entry under root directory of `uproc` filesystem.
 ```C
@@ -114,33 +146,3 @@ int main(int argc, char const *argv[]) {
 ```
 For more examples, see `tests/*`, `example/*`.
 
-#Build&Test
-###To build:  
-1. first make sure `libfuse` is installed on the system.
-2. run following commands:
-```shell
-git clone https://github.com/zxjcarrot/uproc
-cd uproc
-make
-make install #install headers under /usr/local/include, libs under /usr/local/lib
-```
-
-###To examples:  
-1. first make sure `libfuse` is installed on the system.
-2. run following commands:
-```shell
-git clone https://github.com/zxjcarrot/uproc
-cd uproc
-make exmaple
-```
-
-###To test:
-
-1. first make sure `libfuse` is installed on the system.
-2. run following commands:
-```
-git clone https://github.com/zxjcarrot/uproc
-cd uproc
-make test
-./uproc_test
-```
