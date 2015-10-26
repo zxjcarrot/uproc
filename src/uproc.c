@@ -16,6 +16,17 @@
 #define S_IWUGO     (S_IWUSR|S_IWGRP|S_IWOTH)
 #define S_IXUGO     (S_IXUSR|S_IXGRP|S_IXOTH)
 
+
+#ifdef _UPROC_TEST
+static int _uproc_errno;
+int uproc_errno() {
+    return _uproc_errno;
+}
+#define _SET_UPROC_ERRNO(n) if ((n) < 0) _uproc_errno = (n);
+#else
+#define _SET_UPROC_ERRNO(n)
+#endif
+
 /* Jenkins' one-at-a-time hash function */
 static 
 unsigned __uproc_dentry_hash(uproc_dentry_t *parent, const char *key, size_t len) {
@@ -121,14 +132,17 @@ static int __find_last_part(uproc_ctx_t *ctx, const char *name,
 
         n = uproc_htable_find(&ctx->htable, __uproc_dentry_hash(parent, p, namelen),
                           (void*)parent, (void*)p, (void*)namelen);
-        if (!n)
+        if (!n) {
+            _SET_UPROC_ERRNO(-ENOENT);
             return -ENOENT;
+        }
         entry = hlist_entry(n, uproc_dentry_t, hlink);
         prev = p;
         parent = entry;
     }
 
     *ret = parent;
+    _SET_UPROC_ERRNO(-0);
     return 0;
 }
 
@@ -140,10 +154,13 @@ static int __uproc_lookup(uproc_ctx_t *ctx, const char *name,
     int ret = 0;
     const char *p;
 
-    if (!name || !strlen(name))
+    if (!name || !strlen(name)) {
+        _SET_UPROC_ERRNO(-EINVAL);
         return -EINVAL;
-    if ((ret = __find_last_part(ctx, name, &parent, &p)))
+    }
+    if ((ret = __find_last_part(ctx, name, &parent, &p))) {
         return ret;
+    }
 
     namelen = strlen(p);
 
@@ -161,11 +178,14 @@ static int __uproc_lookup(uproc_ctx_t *ctx, const char *name,
     n = uproc_htable_find(&ctx->htable, __uproc_dentry_hash(parent, p, namelen),
                           (void*)parent, (void*)p, (void*)namelen);
 
-    if (!n)
+    if (!n) {
+        _SET_UPROC_ERRNO(-ENOENT);
         return -ENOENT;
+    }
 
     *pentry = hlist_entry(n, uproc_dentry_t, hlink);
 
+    _SET_UPROC_ERRNO(-0);
     return ret;
 }
 
@@ -223,13 +243,16 @@ static int __uproc_register(uproc_ctx_t *ctx,
 
     if ((ret = uproc_htable_insert(&ctx->htable, &entry->hlink,
                 __uproc_dentry_hash(parent, entry->name, entry->namelen), 
-                (void*)parent, (void*)entry->name, (void*)entry->namelen)))
+                (void*)parent, (void*)entry->name, (void*)entry->namelen))) {
+        _SET_UPROC_ERRNO(ret);
         return ret;
+    }
 
     entry->parent = parent;
     entry->next = parent->children;
     parent->children = entry;
 
+    _SET_UPROC_ERRNO(-0);
     return ret;
 }
 
@@ -237,14 +260,18 @@ int uproc_ctx_init(uproc_ctx_t *ctx, const char *mount_point, int dbg) {
     int ret = 0;
 
     ctx->root = malloc(sizeof(uproc_dentry_t) + strlen("/") + 1);
-    if (!ctx->root)
+    if (!ctx->root) {
+        _SET_UPROC_ERRNO(-ENOMEM);
         return -ENOMEM;
+    }
 
     if ((ret = uproc_htable_init(&ctx->htable, _UPROC_LOAD_FACTOR,
                                 uproc_dentry_hash, uproc_dentry_equal))) {
         free(ctx->root);
+        _SET_UPROC_ERRNO(ret);
         return ret;
     }
+
     ctx->dbg = dbg;
     ctx->mount_point = mount_point;
     memset(ctx->root, 0, sizeof(*ctx->root));
@@ -259,7 +286,28 @@ int uproc_ctx_init(uproc_ctx_t *ctx, const char *mount_point, int dbg) {
     uproc_htable_insert(&ctx->htable, &ctx->root->hlink,
                         uproc_dentry_hash(&ctx->root->hlink),
                         (void*)ctx->root, (void*)ctx->root->name, (void*)ctx->root->namelen);
+    _SET_UPROC_ERRNO(-0);
     return 0;
+}
+
+
+// recursively release resources of the tree rooted at @r
+void __uproc_destroy_dentry(uproc_dentry_t *r) {
+    uproc_dentry_t *p;
+    for (p = r->children; p; p = p->next) {
+        __uproc_destroy_dentry(p);
+    }
+    free(r);
+}
+
+void uproc_destroy(uproc_ctx_t *ctx) {
+    uproc_dentry_t *p;
+    if (!ctx)
+        return;
+    for (p = ctx->root->children; p; p = p->next) {
+        __uproc_destroy_dentry(p);
+    }
+    uproc_htable_free(&ctx->htable);
 }
 
 uproc_dentry_t* uproc_mkdir_mode(uproc_ctx_t *ctx,
@@ -345,12 +393,16 @@ static int uproc_opendir(const char *path, struct fuse_file_info *fi) {
         return ret;
     }
 
-    if (!S_ISDIR(ent->mode))
+    if (!S_ISDIR(ent->mode)) {
+        _SET_UPROC_ERRNO(-ENOTDIR);
         return -ENOTDIR;
+    }
 
     uproc_buf_t *b = malloc(sizeof(uproc_buf_t));
-    if (!b)
+    if (!b) {
+        _SET_UPROC_ERRNO(-ENOMEM);
         return -ENOMEM;
+    }
     memset(b, 0, sizeof(*b));
     b->entry = ent;
 
@@ -358,6 +410,7 @@ static int uproc_opendir(const char *path, struct fuse_file_info *fi) {
     fi->fh = (uint64_t)b;
     fi->nonseekable = 1;
 
+    _SET_UPROC_ERRNO(-0);
     return 0;
 }
 
@@ -368,14 +421,20 @@ static int uproc_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     uproc_buf_t    *b = (uproc_buf_t*)fi->fh;;
     uproc_dentry_t *entry, *p;
 
-    if (!b)
+    if (!b) {
+        _SET_UPROC_ERRNO(-EINVAL);
         return -EINVAL;
+    }
     entry = b->entry;
-    if (!entry)
+    if (!entry) {
+        _SET_UPROC_ERRNO(-EINVAL);
         return -EINVAL;
+    }
 
-    if (!S_ISDIR(entry->mode))
+    if (!S_ISDIR(entry->mode)) {
+        _SET_UPROC_ERRNO(-ENOTDIR);
         return -ENOTDIR;
+    }
 
     filler(buf, ".", NULL, 0);
     filler(buf, "..", NULL, 0);
@@ -383,6 +442,7 @@ static int uproc_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
         filler(buf, p->name, NULL, 0);
     }
 
+    _SET_UPROC_ERRNO(-0);
     return 0;
 }
 
@@ -398,6 +458,7 @@ static int uproc_getattr(const char *path, struct stat *stbuf)
     if (ret) {
         if (ctx->dbg)
             fprintf(stderr, "\"%s\" does not exist\n", path);
+        _SET_UPROC_ERRNO(ret);
         return ret;
     }
 
@@ -415,6 +476,7 @@ static int uproc_getattr(const char *path, struct stat *stbuf)
     stbuf->st_gid = ent->gid;
     stbuf->st_atime = time(NULL);
     stbuf->st_ctime = stbuf->st_atime;
+    _SET_UPROC_ERRNO(-0);
     return ret;
 }
 
@@ -428,6 +490,7 @@ static int uproc_open(const char *path, struct fuse_file_info *fi)
     if (ret) {
         if (ctx->dbg)
             fprintf(stderr, "\"%s\" does not exist\n", path);
+        _SET_UPROC_ERRNO(ret);
         return ret;
     }
 
@@ -441,6 +504,7 @@ static int uproc_open(const char *path, struct fuse_file_info *fi)
     fi->fh = (uint64_t)b;
     fi->nonseekable = 1;
 
+    _SET_UPROC_ERRNO(-0);
     return 0;
 }
 
@@ -471,17 +535,25 @@ static int uproc_read(const char *path, char *buf, size_t size, off_t offset,
     uproc_dentry_t *entry;
     int nread = 0;
 
-    if (!b)
+    if (!b) {
+        _SET_UPROC_ERRNO(-EINVAL);
         return -EINVAL;
+    }
     entry = b->entry;
-    if (!entry)
+    if (!entry) {
+        _SET_UPROC_ERRNO(-EINVAL);
         return -EINVAL;
+    }
 
-    if (S_ISDIR(entry->mode))
+    if (S_ISDIR(entry->mode)) {
+        _SET_UPROC_ERRNO(-EISDIR);
         return -EISDIR;
+    }
 
-    if (!entry->read_proc)
+    if (!entry->read_proc) {
+        _SET_UPROC_ERRNO(-ENOSYS);
         return -ENOSYS;
+    }
 
     if (offset < entry->size && entry->read_proc && !b->done) {
         if (offset + size > entry->size)
@@ -494,6 +566,8 @@ static int uproc_read(const char *path, char *buf, size_t size, off_t offset,
     // careful, @nread might be a error number
     if (nread > 0 && nread > entry->size)
         nread = entry->size;
+
+    _SET_UPROC_ERRNO(nread);
     return nread;
 }
 
@@ -503,14 +577,25 @@ static int uproc_write(const char * path, const char *buf, size_t size, off_t of
     uproc_dentry_t *entry;
     int written = 0; // bytes written by 
 
-    if (!b)
+    if (!b) {
+        _SET_UPROC_ERRNO(-EINVAL);
         return -EINVAL;
+    }
     entry = b->entry;
-    if (!entry)
+    if (!entry) {
+        _SET_UPROC_ERRNO(-EINVAL);
         return -EINVAL;
+    }
 
-    if (S_ISDIR(entry->mode))
+    if (S_ISDIR(entry->mode)) {
+        _SET_UPROC_ERRNO(-EISDIR);
         return -EISDIR;
+    }
+
+    if (!entry->write_proc) {
+        _SET_UPROC_ERRNO(-ENOSYS);
+        return -ENOSYS;
+    }
 
     if (entry->write_proc && !b->done) {
         b->mem = (char*)buf;
@@ -523,6 +608,7 @@ static int uproc_write(const char * path, const char *buf, size_t size, off_t of
     // careful, @written might be a error number
     if (written > 0 && written > entry->size)
         written = entry->size;
+    _SET_UPROC_ERRNO(written);
     return written;
 }
 
@@ -552,7 +638,32 @@ static struct fuse_operations uproc_ops = {
 };
 
 int uproc_run(uproc_ctx_t *ctx) {
+    struct fuse *fuse;
+    char *mountpoint = (char*)ctx->mount_point;
+    int multithreaded = 0;
+    int res;
+
     argv[3] = (char*)ctx->mount_point;
     uproc_instance = ctx;
-    return fuse_main(argc, argv, &uproc_ops, NULL);
+
+    fuse = fuse_setup(argc, argv, &uproc_ops, sizeof(uproc_ops), &mountpoint,
+                 &multithreaded, NULL);
+    if (fuse == NULL)
+        return -1;
+
+    ctx->fuse = fuse;
+    res = fuse_loop(fuse);
+
+    fuse_teardown(fuse, mountpoint);
+
+    uproc_destroy(ctx);
+
+    return res;
+}
+
+/* 
+* Tells uproc to exit.
+*/
+void uproc_exit(uproc_ctx_t *ctx) {
+    fuse_exit(ctx->fuse);
 }

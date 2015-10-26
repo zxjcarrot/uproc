@@ -16,8 +16,19 @@ extern "C" {
 typedef struct uproc_ctx       uproc_ctx_t;
 typedef struct uproc_dentry    uproc_dentry_t;
 typedef struct uproc_buf       uproc_buf_t;
-typedef int (*uproc_read_proc_t)(uproc_buf_t *buf, int *done, off_t fileoff, void *private_data);
-typedef int (*uproc_write_proc_t)(uproc_buf_t *buf, int *done, off_t fileoff, void *private_data);
+
+/*
+* @buf: For read request, @buf stores the buffer into which data should be written by your handler.
+*       For write request, @buf stores the buffer from which data should be read by your handler.
+* @done: Indicator of the completion of the request, if *done is set to 1 by your handler,
+*        following read or write syscalls of the request will be simply returned 
+*         with the requested size of the syscall.
+* @fileoff: the offset of the syscall.
+* @private_data: user data provided by your program at the registration.
+*/
+typedef int (*uproc_handler_t)(uproc_buf_t *buf, int *done, off_t fileoff, void *private_data);
+typedef uproc_handler_t uproc_read_proc_t ;
+typedef uproc_handler_t uproc_write_proc_t;
 
 struct uproc_ctx {
     uproc_dentry_t  *root;  // root dir entry
@@ -28,6 +39,7 @@ struct uproc_ctx {
     */
     uproc_htable_t   htable;
     const char      *mount_point;
+    struct fuse     *fuse;
     int              dbg; // if debug is on
 };
 
@@ -65,15 +77,18 @@ int uproc_ctx_init(uproc_ctx_t *ctx, const char *mount_point, int dbg);
 * Starts the event loop of uproc filesystem.
 * To cleanly stop uproc, call uproc_exit().
 * After receiving the exit signal from uproc_exit(),
-* it unregisters all the uproc entry from the filesystem, 
-* deallocates memory and exits. 
+* it calls uproc_destroy to release resouces.
 */
 int uproc_run(uproc_ctx_t *ctx);
 
+/*
+* Unregisters all the uproc entry from the filesystem and deallocates memory. 
+*/
+void uproc_destroy(uproc_ctx_t *ctx);
 /* 
 * Tells uproc to exit.
 */
-void uproc_exit();
+void uproc_exit(uproc_ctx_t *ctx);
 
 
 /*
@@ -308,10 +323,14 @@ uproc_dentry_t* uproc_create_entry_string(uproc_ctx_t *ctx,
                                            const char *name, // name of the entry
                                            mode_t mode,      // permissions
                                            uproc_dentry_t* parent,
-                                           int readonly,
                                            size_t size, // maximum size of content the entry could hold, content wil be trauncated if exceeds this limit
+                                           int readonly,
                                            char *v
                                            );
+
+#ifdef _UPROC_TEST
+int uproc_errno();
+#endif
 #ifdef __cplusplus
 }
 #endif

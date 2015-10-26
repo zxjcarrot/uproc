@@ -7,7 +7,6 @@
 #include <errno.h>
 #include <stdio.h>
 
-
 static int __uchar_read_proc(uproc_buf_t *buf, int *done, off_t fileoff, void *private_data) {
     unsigned char *v = (unsigned char *)private_data;
     int n = snprintf(buf->mem, buf->size, "%c", *v);
@@ -286,7 +285,7 @@ static int __cstring_read_proc(uproc_buf_t *buf, int *done, off_t fileoff, void 
     const char *v = (const char *)private_data;
     size_t len;
     size_t size = (buf->entry->size > buf->size ? buf->size : buf->entry->size);
-
+    fprintf(stderr, "__cstring_read_proc: %s, size: %lu\n", v, size);
     *done = 1;
     if (size <= 1) {
         return 0;
@@ -297,9 +296,7 @@ static int __cstring_read_proc(uproc_buf_t *buf, int *done, off_t fileoff, void 
         size = len;
     }
 
-    --size; // save a byte for '\n'
-
-    memcpy(buf->mem, v, size);
+    memcpy(buf->mem, v, len);
 
     buf->mem[size] = '\n';
     return size + 1;
@@ -682,10 +679,11 @@ static int __int64_write_proc(uproc_buf_t *buf, int *done, off_t fileoff, void *
 
 static int __string_write_proc(uproc_buf_t *buf, int *done, off_t fileoff, void *private_data) {
     char *v = (char *)private_data;
-    size_t size = (buf->entry->size > buf->size ? buf->size : buf->entry->size);
+    size_t size = (buf->entry->size - 1 > buf->size ? buf->size : buf->entry->size - 1);
     *done = 1;
     memcpy(v, buf->mem , size);
-    return size + 1;
+    v[size] = '\0';
+    return size;
 }
 
 static uproc_dentry_t* __uproc_utility_create_internal(uproc_ctx_t *ctx,
@@ -939,8 +937,8 @@ uproc_dentry_t* uproc_create_entry_string(uproc_ctx_t *ctx,
                                            const char *name, // name of the entry
                                            mode_t mode,      // permissions
                                            uproc_dentry_t* parent,
-                                           int readonly,
                                            size_t size, // maximum size of content the entry could hold, content wil be trauncated if exceeds this limit
+                                           int readonly,
                                            char *v
                                            ) {
     return __uproc_utility_create_internal(ctx, name, mode, 0, parent, readonly,

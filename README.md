@@ -1,82 +1,115 @@
 # Overview
-`iris` is asynchronous logging library designed to log messages with minimum overhead to the performance. The cost of logging a message is merely copying the arguments into a lockfree queue.
+`uproc` is the acronym for userspace /proc filesystem. `uproc` lets you export your program's states into a directory structure just like linux kernel's /proc filesystem. 
 
 # Design
-Under the hood, `iris` uses a background thread (logging thread) to offload logging from other threads.
-1. For every other threads, they keep a lockfree queue to buffer the messages.
-2. The logging thread periodically scans through all these queues to collect messages, formats them and writes them into log file.  
-
-A few highlights of the design of `iris` to achieve low latency:
-1. Buffering messages with thread local lockfree queue.
-2. Memory is managed by a thread local ringbuffer taking the advantage that logging is FIFO. Because the fact that logging is FIFO. This scales well in multithreaded environment. 
-3. Minimum context switches.
-
-# Usage
-The supported severity levels are:
-```c++
-enum severity_level {
-    TRACE,
-    DEBUG,
-    INFO,
-    WARN,
-    ERROR,
-    FATAL
-};
+1. `uproc` runs a eventloop to process read and write requests, so `uproc` should be run in a independent thread.
+2. Every pathname in `uproc` is associated with two handlers which handles read and write syscalls respectively. 
+3. Handler is in the form of:
+```C
+    /*
+    * @buf: For read request, @buf stores the buffer into which data should be written by your handler.
+    *       For write request, @buf stores the buffer from which data should be read by your handler.
+    * @done: Indicator of the completion of the request, if *done is set to 1 by your handler,
+    *        following read or write syscalls of the request will be simply returned 
+    *         with the requested size of the syscall.
+    * @fileoff: the offset of the syscall.
+    * @private_data: user data provided by your program at the registration.
+    */
+    int (*uproc_handler_t)(uproc_buf_t *buf, int *done, off_t fileoff, void *private_data);
 ```
-By default, `iris` logs messages to `stdout` and filters out severity level less than `INFO`.
 
-```c++
-#include <iris/level_logger.h>
+4. `uproc` provides very few core interfaces, and some utility wrappers for exporting primitive types. Checkout `include/uproc.h` to see detailed usage of the interfaces.  
 
-// this creates a logging thread, logs messages to stdout
-iris::level_logger g_log;
+# Dependency
+`uproc` is built on `fuse` and written in standard C, so only `libfuse` is required.
 
-int main (int argc, char const *argv[]) {
-    //configure thread level parameters, these should be done before any logging
-    // queue size
-    g_log.set_thread_queue_size(1024);
-    // ring buffer size
-    g_log.set_thread_ringbuf_size(10240);
+#HowToUse
+Example: creates 3 entry under root directory of `uproc` filesystem.
+```
+#include <errno.h>
+#include <string.h>
+#include <stdio.h>
+#include <ctype.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <assert.h>
 
-    g_log.info("Greetings from %s, bye %d\n", 'iris', 0);
+#include <uproc.h>
 
-    //this tells logging thread to persist the data into file and waits
-    g_log.sync_and_close();
+int var1;
+const char * var2;
+int var3;
 
+int uproc_read_var1(uproc_buf_t *buf, int *done, off_t fileoff, void *private_data) {
+    ++var1;
+    int n = snprintf(buf->mem, buf->size, "%d\n", var1);
+    if (n > 0) {
+        *done = 1;
+    }
+    return n;
+}
+
+int uproc_write_var1(uproc_buf_t *buf, int *done, off_t fileoff, void *private_data) {
+    const char *p = buf->mem;
+    int x = 0;
+    while (p - buf->mem < buf->size && !isdigit(*p))
+        ++p;
+
+    while (p - buf->mem < buf->size && isdigit(*p)){
+        x = x * 10 + *p++ - '0';
+    }
+
+    var1 = x;
+    return buf->size;
+}
+
+int uproc_read_var2(uproc_buf_t *buf, int *done, off_t fileoff, void *private_data) {
+    int n = snprintf(buf->mem, buf->size, "%s\n", var2);
+    if (n > 0) {
+        *done = 1;
+    }
+    return n;
+}
+
+int main(int argc, char const *argv[]) {
+    int ret;
+    var1 = 123;
+    var2 = "das";
+    var3 = 445;
+    uproc_ctx_t uproc_ctx;
+
+    ret = uproc_ctx_init(&uproc_ctx, "uproc", 1);
+    if (ret) {
+        fprintf(stderr, "failed to initialize uproc %s\n", strerror(ret));
+    }
+
+    /* readable writable entry */
+    uproc_dentry_t *ent1 = uproc_create_entry(&uproc_ctx, /* name */"var1",
+                                            /* permission */ S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH,
+                                            /* entry size */4096,
+                                            /* use root the parent*/ NULL,
+                                            /* read handler */ uproc_read_var1,
+                                            /* write handler */ uproc_write_var1,
+                                            /* user data */ NULL);
+    /* readonly entry */
+    uproc_dentry_t *ent2 = uproc_create_entry(&uproc_ctx, /* name */"var2",
+                                            /* default permission S_IRUGO */0,
+                                            /* entry size */4096,
+                                            /* use root the parent*/ NULL,
+                                            /* read handler */ uproc_read_var2,
+                                            /* write handler */NULL,
+                                            /* user data */ NULL);
+    /* create entry using int handler provided by uproc */
+    uproc_dentry_t *ent3 = uproc_create_entry_int(&uproc_ctx, 
+                                            /* name */ "var3",
+                                            /* permission */ 0,
+                                            /* parent */ NULL,
+                                            /* readonly */ 0,
+                                            /* pointer to the variable */ &var3);
+    assert(ent1 && ent2 && ent3);
+    uproc_run(&uproc_ctx);
     return 0;
 }
 ```
-Using a `file_writer` to logs all messages into a file:
-```c++
-#include <iris/level_logger.h>
-#include <iris/file_writer.h>
-
-iris::file_writer writer("./log.txt");
-// this creates a logging thread
-iris::level_logger g_log(&writer, iris::TRACE);
-
-int main (int argc, char const *argv[]) {
-    //configure thread level parameters, these should be done before any logging
-    // queue size
-    g_log.set_thread_queue_size(1024);
-    // ring buffer size
-    g_log.set_thread_ringbuf_size(20480);
-    
-    g_log.info("Greetings from %s, bye %d\n", 'iris', 0);
-    
-    //this tells logging thread to persist the data into file and waits
-    g_log.sync_and_close();
-
-    return 0;
-}
-```
-
-# Building & Installation
-
-To build the library, simply clone the projet, go inside the `iris` direcotry and  run following commands.
-```shell
-make
-make test
-make install
-```
-To integrate `iris` into your program, link with `-liris` options.
+For more examples, see `tests/*`.

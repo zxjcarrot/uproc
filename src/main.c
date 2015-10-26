@@ -1,28 +1,50 @@
 #include <errno.h>
 #include <string.h>
 #include <stdio.h>
+#include <ctype.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <assert.h>
+
 #include <uproc.h>
 
 int var1;
 const char * var2;
+int var3;
+
 int uproc_read_var1(uproc_buf_t *buf, int *done, off_t fileoff, void *private_data) {
-    size_t n = snprintf(buf->mem, buf->size, "%d\n", var1++) + 1;
-    if (n < buf->size) {
+    ++var1;
+    int n = snprintf(buf->mem, buf->size, "%d\n", var1);
+    if (n > 0) {
         *done = 1;
     }
     return n;
+}
+
+int uproc_write_var1(uproc_buf_t *buf, int *done, off_t fileoff, void *private_data) {
+    const char *p = buf->mem;
+    int x = 0;
+    while (p - buf->mem < buf->size && !isdigit(*p))
+        ++p;
+
+    while (p - buf->mem < buf->size && isdigit(*p)){
+        x = x * 10 + *p++ - '0';
+    }
+
+    var1 = x;
+    return buf->size;
 }
 
 int uproc_read_var2(uproc_buf_t *buf, int *done, off_t fileoff, void *private_data) {
-    size_t n = snprintf(buf->mem, buf->size, "%s\n", var2) + 1;
-    if (n < buf->size) {
+    int n = snprintf(buf->mem, buf->size, "%s\n", var2);
+    if (n > 0) {
         *done = 1;
     }
     return n;
 }
 
-int var3;
+
 
 int main(int argc, char const *argv[]) {
     int ret;
@@ -30,18 +52,36 @@ int main(int argc, char const *argv[]) {
     var2 = "das";
     var3 = 445;
     uproc_ctx_t uproc_ctx;
-    
+
     ret = uproc_ctx_init(&uproc_ctx, "uproc", 1);
     if (ret) {
         fprintf(stderr, "failed to initialize uproc %s\n", strerror(ret));
     }
 
-    uproc_dentry_t *ent1 = uproc_create_entry(&uproc_ctx, "var1", 0, 4096, NULL, uproc_read_var1, NULL, NULL);
-    uproc_dentry_t *ent2 = uproc_create_entry(&uproc_ctx, "var2", 0, 4096, NULL, uproc_read_var2, NULL, NULL);
-    uproc_dentry_t *ent3 = uproc_create_entry_int(&uproc_ctx, "var3", 0, NULL, 0, &var3);
-    assert(ent1);
-    assert(ent2);
-    assert(ent3);
+    /* normal entry under / */
+    uproc_dentry_t *ent1 = uproc_create_entry(&uproc_ctx, /* name */"var1",
+                                            /* permission */ S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH,
+                                            /* entry size */4096,
+                                            /* use root the parent*/ NULL,
+                                            /* read handler */ uproc_read_var1,
+                                            /* write handler */ uproc_write_var1,
+                                            /* user data */ NULL);
+    /* readonly entry */
+    uproc_dentry_t *ent2 = uproc_create_entry(&uproc_ctx, /* name */"var2",
+                                            /* default permission S_IRUGO */0,
+                                            /* entry size */4096,
+                                            /* use root the parent*/ NULL,
+                                            /* read handler */ uproc_read_var2,
+                                            /* write handler */NULL,
+                                            /* user data */ NULL);
+    /* create entry using int handler provided by uproc */
+    uproc_dentry_t *ent3 = uproc_create_entry_int(&uproc_ctx, 
+                                            /* name */ "var3",
+                                            /* permission */ 0,
+                                            /* parent */ NULL,
+                                            /* readonly */ 0,
+                                            /* pointer to the variable */ &var3);
+    assert(ent1 && ent2 && ent3);
     uproc_run(&uproc_ctx);
     return 0;
 }
