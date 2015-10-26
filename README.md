@@ -25,7 +25,7 @@
 
 #HowToUse
 Example: creates 3 entry under root directory of `uproc` filesystem.
-```
+```C
 #include <errno.h>
 #include <string.h>
 #include <stdio.h>
