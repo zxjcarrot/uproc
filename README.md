@@ -24,6 +24,15 @@
 
 
 #Build&Test
+In order to build & test `uproc`, you must install `libfuse` and its header files.  
+On Ubuntu/Debain:
+```shell
+sudo apt-get install libfuse-dev
+```
+On CentOs:
+```shell
+sudo yum install fuse-devel
+```
 ###To build:  
 1. first make sure `libfuse` is installed on the system.
 2. run following commands:
