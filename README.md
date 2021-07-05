@@ -23,7 +23,7 @@
 `uproc` is built on `fuse` and written in standard C, so only `libfuse` is required.
 
 
-#Build&Test
+# Build&Test
 In order to build & test `uproc`, you must install `libfuse` and its header files.  
 On Ubuntu/Debain:
 ```shell
@@ -33,7 +33,7 @@ On CentOs:
 ```shell
 sudo yum install fuse-devel
 ```
-###To build:  
+### To build:  
 1. first make sure `libfuse` is installed on the system.
 2. run following commands:
 ```shell
@@ -43,7 +43,7 @@ make
 make install #install headers under /usr/local/include, libs under /usr/local/lib
 ```
 
-###To build examples:  
+### To build examples:  
 1. first make sure `libfuse` is installed on the system.
 2. run following commands:
 ```shell
@@ -52,7 +52,7 @@ cd uproc
 make exmaple
 ```
 
-###To test:
+### To test:
 
 1. first make sure `libfuse` is installed on the system.
 2. run following commands:
@@ -63,7 +63,7 @@ make test
 ./uproc_test
 ```
 
-#How to use
+# How to use
 Example: creates 3 entry under root directory of `uproc` filesystem.
 ```C
 #include <errno.h>
@@ -154,5 +154,5 @@ int main(int argc, char const *argv[]) {
 }
 ```
 For more examples, see `tests/*`, `example/*`.
-#How to contribute
+# How to contribute
 Any contribution is welcome, just send the pull requests.
