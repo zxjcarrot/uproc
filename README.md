@@ -155,4 +155,4 @@ int main(int argc, char const *argv[]) {
 ```
 For more examples, see `tests/*`, `example/*`.
 # How to contribute
-Any contribution is welcome, just send the pull requests.
+Any contributions are welcomed.
